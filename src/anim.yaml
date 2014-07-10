@@ -1,0 +1,8 @@
+- name: stand_init
+  frame_info: 1:24:1.0
+- name: move_1_step_forward_from_stand
+  frame_info: 24:72:2.0
+- name: move_1_step_forward
+  frame_info: 23:74:2.0
+- name: move_1_step_forward_to_stand
+  frame_info: 74:98:1.0

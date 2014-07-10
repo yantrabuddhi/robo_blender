@@ -3,6 +3,7 @@
   binding: shapekey:Head:JawOpen
   type: pololu
   ros_path: cmd_pololu
+  joint_category:head
   motorid: 17
   default: 0
   min: -1
@@ -16,6 +17,7 @@
   binding: shapekey:Head:BrowsD_L
   type: pololu
   ros_path: cmd_pololu
+  joint_category:head
   motorid: 16
   default: 0
   min: -1
@@ -29,6 +31,7 @@
   binding: bone:Armature:bracket3:x
   type: pololu
   ros_path: cmd_pololu
+  joint_category:head
   motorid: 3
   default: 0
   min: 0
@@ -42,6 +45,7 @@
   binding: bone:Armature:bracket2:z
   type: pololu
   ros_path: cmd_pololu
+  joint_category:head
   motorid: 2
   default: 0
   min: 0
@@ -55,6 +59,7 @@
   binding: bone:Armature:base:y
   type: pololu
   ros_path: cmd_pololu
+  joint_category:head
   motorid: 23
   default: 0
   min: 0
