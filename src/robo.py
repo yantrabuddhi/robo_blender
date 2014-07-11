@@ -21,16 +21,16 @@ from bpy.app.handlers import persistent
 from std_msgs.msg import Float64
 from std_msgs.msg import UInt16MultiArray
 from trajectory_msgs.msg import JointTrajectory
-from trajectory_msgs.msg import JointTrajectoryPoint.msg
-
+from trajectory_msgs.msg import JointTrajectoryPoint
+from control_msgs.msg import FollowJointTrajectoryAction
+from control_msgs.msg import FollowJointTrajectoryActionGoal
+from control_msgs.msg import FollowJointTrajectoryFeedback
+from control_msgs.msg import FollowJointTrajectoryResult
 from ros_pololu_servo.msg import servo_pololu
 from ros_faceshift.msg import *
 from ros_animate.msg import *
 
 class robo_blender :
-    known_processors_callbacks={'faceshift_source': faceshift_callback,
-    'ZenoAnimationSource':zeno_callback
-    }
     use_joint_array=True
 
     def read_motor_config(self, config):
@@ -49,40 +49,45 @@ class robo_blender :
         #faceshift functionality might be incompatible with animation functionality of zeno, so..
         #send faceshift direct to ros or use only either faceshift or zeno_callback
         #mandeep
+        known_processors_callbacks={
+                                        'faceshift_source': faceshift_callback,
+                                        'ZenoAnimationSource':zeno_callback
+                                   }
+
         def faceshift_callback(msg):
-          #apply processor and do stuff
-          processor=detected_processors['faceshift_source']
-          for con in self.inputs:
-              if (con["processor"]=='faceshift_source'):
-                r = processor.process(msg,con)
-                binding = con["binding"].split(":")
-                #r = processor.process(msg, con)
-                if binding[0] == "shapekey":
-                    self.set_shape_position(con, r)
-                if binding[0] == "bone":
-                    self.set_bone_position(con, r)
-                self.send_motors()
+            #apply processor and do stuff
+            processor=detected_processors['faceshift_source']
+            for con in self.inputs:
+                if con["processor"]=='faceshift_source':
+                    r = processor.process(msg,con)
+                    binding = con["binding"].split(":")
+                    #r = processor.process(msg, con)
+                    if binding[0] == "shapekey":
+                        self.set_shape_position(con, r)
+                    if binding[0] == "bone":
+                        self.set_bone_position(con, r)
+            self.send_motors()
                 
         def zeno_callback(msg):
-          processor=detected_processors['ZenoAnimationSource']
-          r = processor.process(msg,self.anim)
-          pololu_arr,dynamixel_arr=self.animate(r)
+            processor=detected_processors['ZenoAnimationSource']
+            r = processor.process(msg,self.anim)
+            self.animate(r)
           
         processors = {}
-        self.detected_processors={}
+        #self.detected_processors={}
         #source_listeners = {}
-        for processor in self.known_processors:
+        for processor in known_processors_callbacks:
             filename = os.path.join(os.path.dirname(bpy.data.filepath), "processors/%s.py" % processor)
             exec(compile(open(filename).read(), "processors/%s.py" % processor, 'exec'), globals(), locals())
-        self.detected_processors=processors
-        for processor in detected_processors:
-            rospy.Subscriber(detected_processors[processor], detected_processors[processor].msgclass(), known_processors_callbacks[processor])
+        detected_processors=processors
+        for processor_d in detected_processors:
+            rospy.Subscriber(detected_processors[processor_d], detected_processors[processor_d].msgclass(), known_processors_callbacks[processor_d])
         for con in self.inputs:
             name = con["name"]
             binding = con["binding"].split(":")
             source = con["source"].split(":")
             if con["processor"] not in processors:
-              print("NOT FOUND: Processor %s for \n input %s \nBinding %s\n", con["processor"],con["name"],con["binding"])
+                print("NOT FOUND: Processor %s for \n input %s \nBinding %s\n", con["processor"],con["name"],con["binding"])
 
     def send_motors(self):
         for motor in self.config:
@@ -94,11 +99,11 @@ class robo_blender :
                 self.position_motor(motor, self.get_bone_position(motor))
                 
     def animate(infFrames):
-        self.anim_fps=24.0
+        #self.anim_fps=24.0
         frame_start=infFrames[0]
         frame_stop=infFrame[1]
         duration=infFrame[2]
-        min_time=infFrame[3]
+        #min_time=infFrame[3]
         if frame_start<=0: return
         pol_arr=[]
         dyn_arr=[]
@@ -120,7 +125,7 @@ class robo_blender :
         #list positions by motor
         mtrl={}#motor dictionary, positions, speeds list
         pangle=8.0
-        speed=0
+        speed=0.0
         for frame1 in dyn_arr:
             for db in frame1:
                 mt=db[0]
@@ -131,8 +136,8 @@ class robo_blender :
                    speed=(cangle-pangle)*rt #rt=rate in float
                 pangle=cangle
                 jnt=mt["joint_category"]
-                if mt['name'] not in mtrl: mtrl[mt['name']=[]
-                mtrl[mt['name']].append((jnt,cangle,speed))#current angle, speed
+                if mt['name'] not in mtrl: mtrl[mt['name']]=[]
+                mtrl[mt['name']].append((mt,cangle,speed))#current angle, speed
         #get all motor categories
         for conf in self.config:
             if conf['joint_category'] not in motor_category:
@@ -141,9 +146,14 @@ class robo_blender :
         #make trajectory message
         for mtrs in mtrl:
             arr=mtrl[mtrs]
-            elem=arr[0]
+            etemp1=arr[0]
+            etemp2=etemp1[0]
+            elem=etemp2["joint_category"]
             motor_category[elem[0]].append((mtrs,arr))
 
+        all_cat_traj=[]
+        client={}
+        #joint_category is same as joint controller
         for cats in motor_category:
             traj=JointTrajectory()
             for mtrs in motor_category[cats]:
@@ -154,9 +164,22 @@ class robo_blender :
                 for mtr in mtr_pts:
                     pos_arr.positions.append(mtr[1])
                     pos_arr.velocities.append(mtr[2])
+                    print("\n motor:%s : pos:%f,speed:%f",mtr_name,mtr[1],mtr[2])
                 traj.points.append(pos_arr)
+            all_cat_traj.append((cats,traj))
         #send trajectory for the category
-        
+        for tr in all_cat_traj:
+            cat=tr[0]
+            traj=tr[1]
+            client[cat] = actionlib.SimpleActionClient(cat, FollowJointTrajectoryAction)
+            client[cat].wait_for_server()
+            goal=FollowJointTrajectoryActionGoal(traj)
+            client[cat].send_goal(goal)
+        #for trajectory in all_cat_traj:
+            #client = actionlib.SimpleActionClient('fibonacci', actionlib_tutorials.msg.FibonacciAction)
+
+
+
         ##distribute motors by category, make all frames
         #all_frames=[]
         #for pFrame in dyn_arr:
@@ -358,11 +381,10 @@ class robo_blender :
         self.pub_pololu=rospy.Publisher(namespace + 'cmd_pololu', servo_pololu)
 
         # init dynamixels
-        for motor in self.config:
-            #if motor["type"] == "pololu" and motor["name"] not in self.pololus:
-                #self.pololus[motor["name"]] = pub_pololu
-            if motor["type"] == "dynamixels" and motor["name"] not in self.dynamixels:
-                self.dynamixels[motor["name"]] = rospy.Publisher(namespace + motor["ros_path"]+'/command', Float64)
+        if not use_joint_array:
+            for motor in self.config:
+                if motor["type"] == "dynamixels" and motor["name"] not in self.dynamixels:
+                    self.dynamixels[motor["name"]] = rospy.Publisher(namespace + motor["ros_path"]+'/command', Float64)
                 
         self.bind_msg_motors()
 
@@ -374,4 +396,5 @@ robo = robo_blender()
 robo.read_anim_config("anim.yaml")
 robo.read_motor_config("motors.yaml")
 robo.read_input_config("inputs.yaml")
+use_joint_array=True
 robo.execute()
