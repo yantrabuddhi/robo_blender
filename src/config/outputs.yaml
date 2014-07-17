@@ -1,0 +1,48 @@
+- name: neck_euler
+  class: state.ParametersOut
+  enabled: true
+  pubtopic: point_head
+  msg: basic_head_api.msg.PointHead
+  binding:
+    - varpath: yaw
+      bonerot: Armature:base:y
+    - varpath: pitch
+      bonerot: Armature:bracket3:x
+    - varpath: roll
+      bonerot: Armature:bracket2:z
+
+- name: face
+  class: state.ParametersOut
+  enabled: true
+  pubtopic: cmd_face_pau
+  msg: pau2motors.msg.pau
+  binding:
+    - varpath: m_coeffs
+      shkey_mesh: Head
+
+- name: eyes
+  class: state.ParametersOut
+  enabled: true
+  pubtopic: cmd_eyes_pau
+  msg: pau2motors.msg.pau
+  binding:
+    - varpath: m_eyeGazeLeftPitch
+      bonerot: leye:leyebone:x
+    - varpath: m_eyeGazeLeftYaw
+      bonerot: leye:leyebone:z
+    - varpath: m_eyeGazeRightPitch
+      bonerot: reye:reyebone:x
+    - varpath: m_eyeGazeRightYaw
+      bonerot: reye:reyebone:z
+
+- name: full_head
+  class: state.CompositeOut
+  enabled: true
+  outputs:
+    - neck_euler
+    - face
+    - eyes
+
+- name: animation
+  class: TimelineAnimation
+  enabled: false
